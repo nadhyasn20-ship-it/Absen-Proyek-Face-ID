@@ -1,1 +1,567 @@
-# Absen-Proyek-Face-ID
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Presensi - Universitas Nusa Putra</title>
+    
+    <!-- Memuat Tailwind CSS dengan Konfigurasi Warna Kustom Nusa Putra -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        nusa: {
+                            blue: '#002855',   // Navy Blue Nusa Putra
+                            dark: '#00152b',   // Darker shade for backgrounds
+                            gold: '#FFD100',   // Gold/Yellow Nusa Putra
+                            light: '#f8fafc'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Pustaka Inti -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
+    <style>
+        /* Efek latar belakang elegan */
+        body {
+            background: radial-gradient(circle at top left, #002855, #00152b);
+            background-attachment: fixed;
+        }
+        /* Efek Kaca (Glassmorphism) untuk panel */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4 text-slate-200 antialiased">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <!-- Header Identitas Kampus -->
+        <div class="glass-panel p-6 rounded-2xl flex flex-col md:flex-row items-center gap-6 shadow-2xl relative overflow-hidden">
+            <!-- Dekorasi Abstrak Emas -->
+            <div class="absolute -right-10 -top-10 w-40 h-40 bg-nusa-gold opacity-10 rounded-full blur-3xl"></div>
+            
+            <!-- Ikon/Logo Konstruksi -->
+            <div class="bg-gradient-to-br from-nusa-gold to-yellow-600 p-3 rounded-xl shadow-lg relative z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#00152b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 22L22 22"></path>
+                    <path d="M12 2L12 22"></path>
+                    <path d="M5 17L5 22"></path>
+                    <path d="M19 17L19 22"></path>
+                    <path d="M8 7L16 7"></path>
+                    <path d="M8 12L16 12"></path>
+                    <path d="M8 17L16 17"></path>
+                    <path d="M12 2L8 7"></path>
+                    <path d="M12 2L16 7"></path>
+                </svg>
+            </div>
+            
+            <div class="text-center md:text-left relative z-10">
+                <h1 class="text-3xl font-extrabold text-white tracking-tight">PROYEK KAMPUS NUSA PUTRA</h1>
+                <h2 class="text-lg text-nusa-gold font-medium mt-1">Sistem Absensi Pekerja Lapangan (Face ID & TTD)</h2>
+                <p class="text-slate-400 text-sm mt-1">Manajemen Kehadiran Real-time Kontraktor & Pekerja</p>
+            </div>
+        </div>
+
+        <!-- Indikator Loading AI -->
+        <div id="statusAlert" class="bg-nusa-gold/20 border-l-4 border-nusa-gold text-yellow-100 p-4 rounded-lg shadow-lg flex items-center gap-4 backdrop-blur-md">
+            <svg class="animate-spin h-6 w-6 text-nusa-gold" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            <div>
+                <span id="statusText" class="font-bold block">Inisialisasi Sistem AI Wajah...</span>
+                <span class="text-xs text-yellow-200/70">Mempersiapkan kamera dan memuat database lokal (10-15 detik)</span>
+            </div>
+        </div>
+
+        <!-- Kontainer Utama Aplikasi -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 hidden opacity-0 transition-opacity duration-1000" id="mainApp">
+            
+            <!-- KOLOM KIRI: Kamera & Kontrol (Porsi lebih kecil di layar besar) -->
+            <div class="lg:col-span-5 space-y-6">
+                
+                <div class="glass-panel p-5 rounded-2xl shadow-xl">
+                    <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span> 
+                        Kamera Pemindai
+                    </h2>
+                    
+                    <!-- Wrapper Kamera -->
+                    <div class="relative w-full aspect-video bg-nusa-dark rounded-xl overflow-hidden border border-white/10 shadow-inner">
+                        <video id="videoElement" autoplay muted playsinline class="w-full h-full object-cover transform scale-x-[-1]"></video> <!-- Mirror effect -->
+                        <canvas id="overlayCanvas" class="absolute top-0 left-0 w-full h-full transform scale-x-[-1]"></canvas>
+                    </div>
+
+                    <!-- Panel Mode 2: Presensi (Prioritas Atas) -->
+                    <div class="mt-6 bg-white/5 p-4 rounded-xl border border-white/10">
+                        <button id="btnAbsen" class="w-full flex justify-center items-center gap-2 bg-gradient-to-r from-nusa-gold to-yellow-500 hover:from-yellow-400 hover:to-yellow-500 text-nusa-dark px-4 py-3.5 rounded-lg transition-all font-extrabold text-lg shadow-[0_0_15px_rgba(255,209,0,0.3)] hover:shadow-[0_0_20px_rgba(255,209,0,0.5)] hover:-translate-y-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
+                            PINDAI WAJAH (HADIR)
+                        </button>
+                        <div id="syncStatus" class="text-xs text-center text-nusa-gold hidden mt-3 animate-pulse font-medium">Melakukan sinkronisasi aman ke Cloud...</div>
+                    </div>
+                </div>
+
+                <!-- Panel Mode 1: Pendaftaran -->
+                <div class="glass-panel p-5 rounded-2xl border-t-4 border-t-nusa-gold shadow-xl">
+                    <h2 class="text-sm font-bold text-nusa-gold mb-4 uppercase tracking-wider flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="19" y1="8" x2="19" y2="14"></line><line x1="22" y1="11" x2="16" y2="11"></line></svg>
+                        Pendaftaran Pekerja Baru
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <input type="text" id="inputNamaDaftar" placeholder="Nama Lengkap Pekerja" class="w-full px-4 py-2.5 bg-nusa-dark/50 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-nusa-gold focus:ring-1 focus:ring-nusa-gold transition-colors">
+                        
+                        <div>
+                            <div class="flex justify-between items-end mb-1.5">
+                                <label class="block text-xs font-semibold text-slate-300">Tanda Tangan Digital</label>
+                                <button type="button" id="btnClearSignature" class="text-[10px] bg-red-500/20 text-red-300 hover:bg-red-500/40 px-2 py-1 rounded transition-colors">Bersihkan</button>
+                            </div>
+                            <!-- Kanvas TTD -->
+                            <div class="border-2 border-slate-600 rounded-lg bg-white overflow-hidden shadow-inner">
+                                <canvas id="signatureCanvas" height="120" class="w-full h-[120px] touch-none cursor-crosshair"></canvas>
+                            </div>
+                        </div>
+
+                        <button id="btnDaftar" class="w-full bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2.5 rounded-lg transition-all font-medium">
+                            Daftarkan Profil
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- KOLOM KANAN: Log & Database -->
+            <div class="lg:col-span-7 space-y-6">
+                
+                <!-- Log Kehadiran -->
+                <div class="glass-panel p-6 rounded-2xl shadow-xl h-[400px] flex flex-col">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
+                        <h2 class="text-xl font-bold text-white">Log Presensi Hari Ini</h2>
+                        <button id="btnPdf" disabled class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-white/5 text-slate-500 cursor-not-allowed border border-white/10">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            UNDUH LAPORAN PDF
+                        </button>
+                    </div>
+
+                    <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                        <table class="w-full text-left text-sm">
+                            <thead class="sticky top-0 bg-nusa-blue shadow-md z-10">
+                                <tr class="text-slate-300">
+                                    <th class="py-3 px-4 font-semibold rounded-tl-lg w-24">Waktu</th>
+                                    <th class="py-3 px-4 font-semibold">Nama</th>
+                                    <th class="py-3 px-4 font-semibold text-center">Status</th>
+                                    <th class="py-3 px-4 font-semibold text-center rounded-tr-lg w-28">Validasi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceLog" class="divide-y divide-white/10">
+                                <tr id="emptyLog">
+                                    <td colspan="4" class="py-8 text-center text-slate-400 italic bg-white/5 rounded-b-lg">
+                                        Data presensi kosong. Menunggu pindaian wajah...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Database Lokal -->
+                <div class="glass-panel p-6 rounded-2xl shadow-xl flex-1">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Database Terenkripsi Lokal</h2>
+                        <span class="text-[10px] font-mono bg-nusa-gold/20 text-nusa-gold px-2 py-1 rounded-full border border-nusa-gold/30">Browser Storage</span>
+                    </div>
+                    <ul id="registeredList" class="space-y-2 text-sm max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
+                        <li class="text-slate-400 italic text-center py-4 bg-white/5 rounded-lg border border-white/5" id="emptyDb">Belum ada profil terdaftar.</li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Tambahan CSS untuk Scrollbar Estetik -->
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 209, 0, 0.3); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 209, 0, 0.6); }
+    </style>
+
+    <script>
+        // --- KONFIGURASI ---
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw7dyVz5RDM6f4UGqSi-r-qJTjeoC5zNA9_DTtjWBy0YX7nhF1JVGo4opqmytnho_5r/exec';
+        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+
+        // --- ELEMEN DOM ---
+        const video = document.getElementById('videoElement');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const statusAlert = document.getElementById('statusAlert');
+        const statusText = document.getElementById('statusText');
+        const mainApp = document.getElementById('mainApp');
+        
+        const btnDaftar = document.getElementById('btnDaftar');
+        const inputNamaDaftar = document.getElementById('inputNamaDaftar');
+        const registeredList = document.getElementById('registeredList');
+        const emptyDb = document.getElementById('emptyDb');
+        
+        const btnAbsen = document.getElementById('btnAbsen');
+        const syncStatus = document.getElementById('syncStatus');
+        const attendanceLog = document.getElementById('attendanceLog');
+        const emptyLog = document.getElementById('emptyLog');
+        const btnPdf = document.getElementById('btnPdf');
+
+        // --- STATE ---
+        let labeledFaceDescriptors = []; 
+        let workerSignatures = {};       
+        let todayRecords = [];           
+
+        // ==========================================
+        // 1. PENYIMPANAN LOKAL (DATABASE)
+        // ==========================================
+        function saveDatabaseToLocal() {
+            const dataToSave = labeledFaceDescriptors.map(lfd => ({
+                label: lfd.label,
+                descriptors: lfd.descriptors.map(d => Array.from(d)),
+                signature: workerSignatures[lfd.label]
+            }));
+            localStorage.setItem('nusaPutraFaceDB', JSON.stringify(dataToSave));
+            renderDbUI();
+        }
+
+        function loadDatabaseFromLocal() {
+            const savedData = JSON.parse(localStorage.getItem('nusaPutraFaceDB') || '[]');
+            if (savedData.length > 0) {
+                labeledFaceDescriptors = savedData.map(item => {
+                    const descriptors = item.descriptors.map(d => new Float32Array(d));
+                    workerSignatures[item.label] = item.signature;
+                    return new faceapi.LabeledFaceDescriptors(item.label, descriptors);
+                });
+            }
+            renderDbUI();
+        }
+
+        function renderDbUI() {
+            if (labeledFaceDescriptors.length > 0) {
+                if (emptyDb) emptyDb.style.display = 'none';
+                registeredList.innerHTML = '';
+                labeledFaceDescriptors.forEach(lfd => {
+                    const sigImg = workerSignatures[lfd.label] ? `<img src="${workerSignatures[lfd.label]}" class="h-8 w-16 object-contain bg-white/90 rounded border border-slate-300" />` : '';
+                    registeredList.innerHTML += `
+                        <li class="flex items-center justify-between px-4 py-3 bg-white/5 rounded-lg text-slate-200 font-medium border border-white/10 hover:bg-white/10 transition-colors">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-nusa-gold/20 flex items-center justify-center text-nusa-gold font-bold border border-nusa-gold/30">
+                                    ${lfd.label.charAt(0).toUpperCase()}
+                                </div>
+                                ${lfd.label}
+                            </div>
+                            ${sigImg}
+                        </li>`;
+                });
+            }
+        }
+
+        // ==========================================
+        // 2. KANVAS TANDA TANGAN (PERBAIKAN FINAL)
+        // ==========================================
+        const sigCanvas = document.getElementById('signatureCanvas');
+        const sigCtx = sigCanvas.getContext('2d', { willReadFrequently: true });
+        let isDrawing = false;
+        let hasSignature = false;
+
+        function initCanvasSize() {
+            // Ambil dimensi asli kontainer
+            const rect = sigCanvas.parentElement.getBoundingClientRect();
+            // Cegah error ukuran 0px saat display:none
+            if (rect.width === 0) return; 
+
+            // Simpan gambar lama jika ada (mencegah terhapus saat resize layar HP)
+            const tempImg = new Image();
+            tempImg.src = sigCanvas.toDataURL();
+
+            // Atur ukuran baru
+            sigCanvas.width = rect.width;
+            
+            // Atur properti pena dan latar
+            sigCtx.fillStyle = '#ffffff';
+            sigCtx.fillRect(0, 0, sigCanvas.width, sigCanvas.height);
+            sigCtx.lineWidth = 3;
+            sigCtx.lineCap = 'round';
+            sigCtx.lineJoin = 'round';
+            sigCtx.strokeStyle = '#002855'; // Tinta pena warna Biru Nusa Putra
+
+            // Kembalikan gambar lama setelah resize selesai
+            tempImg.onload = () => sigCtx.drawImage(tempImg, 0, 0);
+        }
+
+        // Listener untuk Mouse & Sentuhan (Touch)
+        function getPos(e) {
+            const rect = sigCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+        
+        sigCanvas.addEventListener('mousedown', (e) => { e.preventDefault(); isDrawing = true; hasSignature = true; const p = getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); });
+        sigCanvas.addEventListener('mousemove', (e) => { if(!isDrawing) return; e.preventDefault(); const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); });
+        sigCanvas.addEventListener('mouseup', () => isDrawing = false);
+        sigCanvas.addEventListener('mouseout', () => isDrawing = false);
+        
+        sigCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawing = true; hasSignature = true; const p = getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }, {passive: false});
+        sigCanvas.addEventListener('touchmove', (e) => { if(!isDrawing) return; e.preventDefault(); const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); }, {passive: false});
+        sigCanvas.addEventListener('touchend', () => isDrawing = false);
+
+        document.getElementById('btnClearSignature').addEventListener('click', () => {
+            sigCtx.fillStyle = '#ffffff'; sigCtx.fillRect(0, 0, sigCanvas.width, sigCanvas.height); hasSignature = false;
+        });
+
+        // ==========================================
+        // 3. INISIALISASI SISTEM
+        // ==========================================
+        async function initSystem() {
+            try {
+                loadDatabaseFromLocal();
+
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                
+                statusAlert.className = "bg-green-500/20 border-l-4 border-green-500 text-green-100 p-4 rounded-lg shadow-lg flex items-center gap-4 backdrop-blur-md";
+                statusAlert.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> <div><span class="font-bold block">Sistem Cerdas Siap</span><span class="text-xs">Mengaktifkan modul kamera...</span></div>`;
+                
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+                    .then(stream => {
+                        video.srcObject = stream;
+                        
+                        // Tampilkan UI Utama
+                        mainApp.classList.remove('hidden');
+                        // Efek Fade-in
+                        setTimeout(() => mainApp.classList.remove('opacity-0'), 100);
+                        
+                        // SANGAT PENTING: Inisiasi ukuran kanvas TEPAT SETELAH UI utama muncul
+                        setTimeout(initCanvasSize, 150); 
+                        window.addEventListener('resize', initCanvasSize); // Pasang pendeteksi putaran layar
+                        
+                        setTimeout(() => { statusAlert.style.display = 'none'; }, 2500);
+                        
+                        video.addEventListener('play', () => {
+                            overlayCanvas.width = video.clientWidth;
+                            overlayCanvas.height = video.clientHeight;
+                        });
+                    })
+                    .catch(err => {
+                        statusText.innerText = "Gagal mengakses kamera. Berikan izin di browser Anda.";
+                        statusAlert.classList.replace('bg-nusa-gold/20', 'bg-red-500/20');
+                        statusAlert.classList.replace('border-nusa-gold', 'border-red-500');
+                    });
+            } catch (error) {
+                statusText.innerText = "Gagal memuat arsitektur AI.";
+                statusAlert.classList.replace('bg-nusa-gold/20', 'bg-red-500/20');
+            }
+        }
+
+        // ==========================================
+        // 4. PENDAFTARAN (ENROLLMENT)
+        // ==========================================
+        btnDaftar.addEventListener('click', async () => {
+            const nama = inputNamaDaftar.value.trim();
+            if (!nama) return alert("Mohon masukkan nama profil.");
+            if (!hasSignature) return alert("Diperlukan Tanda Tangan digital untuk validasi identitas.");
+            
+            if (labeledFaceDescriptors.some(lfd => lfd.label.toLowerCase() === nama.toLowerCase())) {
+                return alert(`Profil "${nama}" sudah ada di database.`);
+            }
+
+            btnDaftar.disabled = true;
+            btnDaftar.innerText = "Mengekstrak Fitur Wajah...";
+
+            const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+            
+            if (!detection) {
+                alert("Wajah tidak terdeteksi! Pastikan area wajah terang dan menghadap kamera.");
+                btnDaftar.disabled = false;
+                btnDaftar.innerText = "Daftarkan Profil";
+                return;
+            }
+
+            const signatureBase64 = sigCanvas.toDataURL('image/png');
+            workerSignatures[nama] = signatureBase64;
+            labeledFaceDescriptors.push(new faceapi.LabeledFaceDescriptors(nama, [detection.descriptor]));
+
+            saveDatabaseToLocal();
+
+            inputNamaDaftar.value = '';
+            document.getElementById('btnClearSignature').click();
+            btnDaftar.disabled = false;
+            btnDaftar.innerText = "Daftarkan Profil";
+            alert(`Pendaftaran Sukses!\nProfil dan TTD "${nama}" telah dienkripsi ke penyimpanan lokal.`);
+        });
+
+        // ==========================================
+        // 5. ABSENSI & SYNC GOOGLE SHEETS
+        // ==========================================
+        btnAbsen.addEventListener('click', async () => {
+            if (labeledFaceDescriptors.length === 0) {
+                return alert("Database Kosong. Harap daftarkan identitas pada panel kiri bawah.");
+            }
+
+            btnAbsen.disabled = true;
+            const originalBtnText = btnAbsen.innerHTML;
+            btnAbsen.innerHTML = `<svg class="animate-spin h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> MEMPROSES BIO-METRIK...`;
+
+            const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.55); // Akurasi diperketat sedikit
+            const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
+
+            if (!detection) {
+                alert("Gagal memindai. Mohon buka masker/kacamata pelindung sesaat.");
+                resetAbsenBtn();
+                return;
+            }
+
+            const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+
+            if (bestMatch.label === 'unknown') {
+                alert("Identitas tidak dikenali. Akses ditolak.");
+                resetAbsenBtn();
+            } else {
+                const namaPekerja = bestMatch.label;
+                const signaturePekerja = workerSignatures[namaPekerja] || ""; 
+                
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                const hariTanggal = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                const statusHadir = "Hadir";
+
+                // Update UI Log
+                if (emptyLog) emptyLog.style.display = 'none';
+                
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-white/5 bg-white/5 hover:bg-white/10 transition-colors";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-slate-300 font-mono">${timeString}</td>
+                    <td class="py-3 px-4 text-white font-bold">${namaPekerja}</td>
+                    <td class="py-3 px-4 text-center"><span class="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-xs font-bold border border-green-500/30">✓ Sesuai</span></td>
+                    <td class="py-3 px-4 text-center">${signaturePekerja ? `<img src="${signaturePekerja}" class="h-8 w-16 object-contain mx-auto bg-white/90 rounded border border-slate-300 shadow-sm mix-blend-screen" style="filter: invert(1);">` : '-'}</td>
+                `;
+                attendanceLog.prepend(tr);
+
+                // Memori PDF
+                todayRecords.push({ waktu: timeString, hariTanggal: hariTanggal, nama: namaPekerja, status: statusHadir, signature: signaturePekerja });
+
+                // Buka Kunci Tombol PDF
+                btnPdf.disabled = false;
+                btnPdf.className = "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all bg-nusa-gold text-nusa-dark hover:bg-yellow-400 shadow-[0_0_10px_rgba(255,209,0,0.4)]";
+
+                // Kirim ke Google Sheets
+                syncStatus.classList.remove('hidden');
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('tanggal', hariTanggal + " " + timeString);
+                    formData.append('nama', namaPekerja);
+                    formData.append('status', statusHadir + " (Bio-Metrik)");
+                    formData.append('signature', signaturePekerja);
+
+                    await fetch(SCRIPT_URL, {
+                        method: 'POST', body: formData, mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    });
+                } catch (error) {
+                    console.error(error);
+                } finally {
+                    syncStatus.classList.add('hidden');
+                    resetAbsenBtn();
+                }
+            }
+
+            function resetAbsenBtn() {
+                setTimeout(() => {
+                    btnAbsen.disabled = false;
+                    btnAbsen.innerHTML = originalBtnText;
+                }, 1000);
+            }
+        });
+
+        // ==========================================
+        // 6. EKSPOR PDF (TEMA NUSA PUTRA)
+        // ==========================================
+        btnPdf.addEventListener('click', () => {
+            if (todayRecords.length === 0) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+
+            // Kop Surat
+            doc.setFillColor(0, 40, 85); // Biru Nusa Putra
+            doc.rect(0, 0, 210, 30, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
+            doc.text("PROYEK PEMBANGUNAN KAMPUS NUSA PUTRA", 105, 15, { align: "center" });
+            
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(255, 209, 0); // Gold Nusa Putra
+            doc.text("Laporan Absensi Pekerja Harian (Face ID & Digital Signature)", 105, 22, { align: "center" });
+
+            // Informasi Waktu Cetak
+            doc.setTextColor(50, 50, 50);
+            doc.setFontSize(9);
+            const cetakTanggal = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            doc.text(`Waktu Unduh: ${cetakTanggal} ${new Date().toLocaleTimeString('id-ID')}`, 14, 40);
+
+            // Tabel Data
+            const tableColumn = ["Waktu", "Tanggal", "Nama Pekerja", "Status", "Tanda Tangan"];
+            const tableRows = todayRecords.map(r => [r.waktu, r.hariTanggal, r.nama, r.status, ""]);
+
+            doc.autoTable({
+                head: [tableColumn], 
+                body: tableRows, 
+                startY: 45, 
+                theme: 'grid', 
+                headStyles: { fillColor: [0, 40, 85], textColor: [255, 209, 0] }, // Biru & Emas
+                styles: { fontSize: 9, cellPadding: 4, minCellHeight: 16, valign: 'middle', lineColor: [200, 200, 200] },
+                didDrawCell: function(data) {
+                    if (data.section === 'body' && data.column.index === 4) {
+                        const base64Img = todayRecords[data.row.index].signature;
+                        if (base64Img) {
+                            const imgW = 22; const imgH = 11;
+                            const x = data.cell.x + (data.cell.width / 2) - (imgW / 2);
+                            const y = data.cell.y + ((data.cell.height - imgH) / 2);
+                            doc.addImage(base64Img, 'PNG', x, y, imgW, imgH);
+                        }
+                    }
+                }
+            });
+
+            // Footer
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(8);
+                doc.setTextColor(150);
+                doc.text(`Halaman ${i} dari ${pageCount} - Dihasilkan oleh Sistem Absensi Proyek`, 105, 285, { align: 'center' });
+            }
+
+            doc.save(`Absensi_Proyek_NusaPutra_${new Date().toISOString().split('T')[0]}.pdf`);
+        });
+
+        // Jalankan
+        window.onload = initSystem;
+    </script>
+</body>
+</html>
